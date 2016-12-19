@@ -25,6 +25,8 @@ import os.path
 import anyconfig
 import m9dicts
 
+import re
+
 from molecule import util
 
 PROJECT_CONFIG = 'molecule.yml'
@@ -101,7 +103,49 @@ class ConfigV1(Config):
             anyconfig.load(
                 configs, ignore_missing=True, ac_merge=MERGE_STRATEGY))
 
+        self._expand_env_vars(m9dicts.convert_to(conf))
         return m9dicts.convert_to(conf)
+
+    def _expand_env_vars(self, config):
+        """ Recursursively searches for occurences of ${} and expands
+        them to a corresponding environment variable if possible.
+
+        :param config: An iterable containing the merged config
+        :return: dict
+        """
+
+        def _get_env_var(matchobj):
+            return os.environ.get(matchobj.group(1), '')
+
+        def _get_sanitized_matches(string):
+            if not isinstance(string, basestring):
+                string = unicode(string)
+            print('string: %s' % string)
+            result = re.sub('\$\{([^\}]*)\}', _get_env_var, string)
+            print('result: %s' %result)
+
+
+        def _is_list_or_dict(obj):
+            if isinstance(obj, dict) or isinstance(obj, list):
+                return True
+            return False
+
+
+        def _findtitem(config):
+            if isinstance(config, dict):
+                for k, v in config.iteritems():
+                    if _is_list_or_dict(v):
+                        _findtitem(v)
+                    else:
+                        _get_sanitized_matches(v)
+            else:
+                for k in  config:
+                    if _is_list_or_dict(k):
+                        _findtitem(k)
+                    else:
+                        _get_sanitized_matches(k)
+
+        _findtitem(config)
 
     def _get_defaults(self):
         return {
