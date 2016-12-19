@@ -25,7 +25,7 @@ import os.path
 import anyconfig
 import m9dicts
 
-import re
+from re import sub
 
 from molecule import util
 
@@ -103,8 +103,9 @@ class ConfigV1(Config):
             anyconfig.load(
                 configs, ignore_missing=True, ac_merge=MERGE_STRATEGY))
 
-        self._expand_env_vars(m9dicts.convert_to(conf))
-        return m9dicts.convert_to(conf)
+        print(type(m9dicts.convert_to(conf)))
+        print(type(self._expand_env_vars(m9dicts.convert_to(conf))))
+        return self._expand_env_vars(m9dicts.convert_to(conf))
 
     def _expand_env_vars(self, config):
         """ Recursursively searches for occurences of ${} and expands
@@ -117,35 +118,29 @@ class ConfigV1(Config):
         def _get_env_var(matchobj):
             return os.environ.get(matchobj.group(1), '')
 
-        def _get_sanitized_matches(string):
-            if not isinstance(string, basestring):
-                string = unicode(string)
-            print('string: %s' % string)
-            result = re.sub('\$\{([^\}]*)\}', _get_env_var, string)
-            print('result: %s' %result)
+        def _replace_matches(line):
+            if not isinstance(line, basestring):
+                line = unicode(line)
+            result = sub('\$\{([^\}]*)\}', _get_env_var, line)
 
 
-        def _is_list_or_dict(obj):
-            if isinstance(obj, dict) or isinstance(obj, list):
-                return True
-            return False
-
-
-        def _findtitem(config):
+        def _recursive_string_replace(config):
             if isinstance(config, dict):
                 for k, v in config.iteritems():
-                    if _is_list_or_dict(v):
-                        _findtitem(v)
+                    if isinstance(v, (dict, list)):
+                        _recursive_string_replace(v)
                     else:
-                        _get_sanitized_matches(v)
+                        v = _replace_matches(v)
             else:
                 for k in  config:
-                    if _is_list_or_dict(k):
-                        _findtitem(k)
+                    if isinstance(k, (dict, list)):
+                        _recursive_string_replace(k)
                     else:
-                        _get_sanitized_matches(k)
+                        k = _replace_matches(k)
 
-        _findtitem(config)
+        _recursive_string_replace(config)
+
+        return config
 
     def _get_defaults(self):
         return {
